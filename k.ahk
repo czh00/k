@@ -38,6 +38,9 @@ Class OSK
 
         this.CurrentX := 0 ; 儲存當前 X 座標
         this.CurrentY := 0 ; 儲存當前 Y 座標
+        
+        this.isMinimized := false ; 新增：用於追蹤最小化狀態
+        this.lastState := {}     ; 新增：用於儲存最小化前的位置和尺寸
 
         this.Keys := [] ; 鍵名與座標映射
         this.Controls := [] ; 控件 HWND 儲存
@@ -150,7 +153,7 @@ Class OSK
             ; ASDFG 列定義
             this.PrettyName["sc01e"]       := "A ㄇ"
             this.PrettyName["sc01f"]       := "S ㄋ"
-            this.PrettyName["sc020"]       := "K ㄎ"
+            this.PrettyName["sc020"]       := "D ㄎ" ; 更正：D 應為 ㄎ
             this.PrettyName["sc021"]       := "F ㄑ"
             this.PrettyName["sc022"]       := "G ㄕ"
             this.PrettyName["sc023"]       := "H ㄘ"
@@ -190,11 +193,15 @@ Class OSK
         StandardWidth := Round(45 * ScaleFactor)
         
         CurrentY := Round(10 * ScaleFactor) 
-        MarginLeft := Round(10 * ScaleFactor)
+        MarginLeft := Round(10 * ScaleFactor) ; 左右/底部邊界
+        
+        MaxRightEdge := 0 ; 新增: 追蹤最右邊按鍵的 X 座標 + 寬度
+        LastButtonY := 0   ; 新增: 追蹤最後一個按鍵的 Y 座標
+
         
         ; GUI 基本設定
         Gui, OSK: +AlwaysOnTop -DPIScale +Owner -Caption +E0x08000000 
-        Gui, OSK: Font, s12, Microsoft JhengHei UI 
+        Gui, OSK: Font, s8, Microsoft JhengHei UI 
         Gui, OSK: Margin, 0, 0
         Gui, OSK: Color, % this.Background
 
@@ -295,12 +302,30 @@ Class OSK
                     ; 儲存按鍵資訊與控件句柄
                     this.Keys[KeyText] := [Index, i]
                     this.Controls[Index, i] := {Progress: border, Labels: labels, Bottom: bottomt, Colour: this.ButtonColour}
+                    
+                    ; --- 尺寸追蹤邏輯 ---
+                    RightEdge := CurrentX + Width
+                    if (RightEdge > MaxRightEdge) {
+                        MaxRightEdge := RightEdge ; 紀錄當前行最右邊按鈕的右邊界 (X 座標 + 寬度)
+                    }
+                    LastButtonY := CurrentY ; 紀錄最後一排按鍵的 Y 座標
+                    ; --- 尺寸追蹤邏輯 End ---
                 }
                 
                 ; 更新下一按鍵的起始 X 座標
                 CurrentX += Width + HorizontalSpacing
             }
         }
+        
+        ; 新增: 計算精確的總寬高，移除多餘的灰色背景
+        ; 總寬度 = 最右邊的按鍵右邊緣 (MaxRightEdge) + MarginLeft (作為右側的邊界)
+        TotalWidth := MaxRightEdge + MarginLeft
+        ; 總高度 = 最後一個按鍵的 Y 座標 (LastButtonY) + 高度 (ButtonHeight) + MarginLeft (作為底部的邊界)
+        TotalHeight := LastButtonY + ButtonHeight + MarginLeft
+        
+        ; 強制設定 GUI 的寬高
+        Gui, OSK:Show, % "w" TotalWidth " h" TotalHeight " Hide"
+        
         Return
     }
 
@@ -406,7 +431,57 @@ Class OSK
             this.Show()
         Return
     }
-    
+
+    ; 新增：切換最小化/還原狀態
+    ToggleMinimize() {
+        if (this.isMinimized) {
+            ; --- 還原視窗 ---
+            ; 1. 還原 ScaleFactor
+            this.ScaleFactor := this.lastState.ScaleFactor
+            
+            ; 2. 重建 GUI (此步驟會產生一個新的大尺寸鍵盤，但位置在右下角)
+            this.RebuildGUI()
+            
+            ; 3. 移動回原來的位置
+            Gui, OSK: +LastFound
+            hwnd := WinExist()
+            WinMove, % "ahk_id " hwnd, , this.lastState.X, this.lastState.Y
+
+            ; 4. 從上次的設定還原透明度
+            trans_levels := [255, 220, 180, 100]
+            WinSet, Transparent, % trans_levels[this.current_trans], 螢幕鍵盤
+
+            this.isMinimized := false
+        } else {
+            ; --- 最小化視窗 ---
+            ; 1. 儲存目前狀態 (位置和縮放比例)
+            Gui, OSK: +LastFound
+            hwnd := WinExist()
+            WinGetPos, currentX, currentY, , , % "ahk_id " hwnd
+            this.lastState := {X: currentX, Y: currentY, ScaleFactor: this.ScaleFactor}
+
+            ; 2. 設定新的縮小比例
+            this.ScaleFactor := 0.15 ; (預設 1.5 的 10%)
+            
+            ; 3. 重建 GUI (此步驟會產生一個新的小尺寸鍵盤)
+            this.RebuildGUI()
+            
+            ; 4. 將新的小鍵盤移動到螢幕右下角
+            Gui, OSK: +LastFound
+            hwnd_small := WinExist()
+            this.GetClientSize(hwnd_small, newW, newH)
+            
+            SysGet, MonWA, MonitorWorkArea, 1
+            newX := MonWARight - newW - 10 ; 加上一點邊界
+            newY := MonWABottom - newH - 10 ; 加上一點邊界
+            
+            WinMove, % "ahk_id " hwnd_small, , newX, newY
+            WinSet, Transparent, 150, % "ahk_id " hwnd_small ; 設定半透明
+
+            this.isMinimized := true
+        }
+    }
+
     ; 循環切換透明度等級
     ToggleTransparent() {
         trans_levels := [255, 220, 180, 100]
@@ -446,6 +521,12 @@ Class OSK
 
     ; 處理按鈕點擊後的邏輯分發
     HandleOSKClick(Key:="") {
+        ; 如果鍵盤是最小化狀態，任何點擊都將其還原
+        if (this.isMinimized) {
+            this.ToggleMinimize()
+            Return
+        }
+
         if not Key
             Key := A_GuiControl
 
@@ -474,7 +555,7 @@ Class OSK
             this.ConfirmClose() ; 關閉程式確認
             Return
         } else if (Key = "Hide") {
-            this.Hide() ; 隱藏鍵盤
+            this.ToggleMinimize() ; 修改：呼叫新的最小化/還原功能
             Return
         }
         
