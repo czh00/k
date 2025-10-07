@@ -3,12 +3,33 @@ SendMode Input
 
 ; 程式啟動與熱鍵設定
 If (A_ScriptFullPath = A_LineFile) { 
-    Global keyboard := new OSK("dark", "bopomofo")
+    Global keyboard := new OSK()
 
     ; 設定熱鍵 Ctrl+Shift+O 來顯示或隱藏鍵盤
     toggle := ObjBindMethod(keyboard, "toggle")
     Hotkey, ^+O, % toggle 
+    
+    ; 綁定 ConfirmClose 方法用於工作列選單
+    closeConfirm := ObjBindMethod(keyboard, "ConfirmClose") 
 
+    ; === 系統托盤圖示設定 (單擊切換顯示/隱藏) ===
+    Menu, Tray, NoStandard ; [修正] 移除預設的「Exit」等標準選單項目
+    
+    ; 1. 設置托盤單擊動作 (Click, 1) 為執行第一個菜單項
+    Menu, Tray, Click, 1
+    Menu, Tray, Tip, 螢幕鍵盤 (Ctrl+Shift+O / 單擊圖示切換)
+
+    ; 2. 「切換顯示/隱藏」項目，並將其設為預設項目
+    Menu, Tray, Add, 切換顯示/隱藏 (^Shift+O), % toggle
+    Menu, Tray, Default, 切換顯示/隱藏 (^Shift+O) ; 設定為右鍵預設項目 (粗體)
+
+    ; 3. 分隔線
+    Menu, Tray, Add
+
+    ; 4. 「關閉程式」項目 (現在會呼叫 ConfirmClose)
+    Menu, Tray, Add, 關閉程式, % closeConfirm
+    ; =======================================================
+    
     keyboard.Show()
 }
 Return 
@@ -31,16 +52,18 @@ HandleOSKClick() {
 Class OSK
 {
 
-    __New(theme:="dark", layout:="qwerty") {
+    __New() {
         this.Enabled := False
         this.current_trans := 1 ; 當前透明度等級 (1 = 255/完全不透明)
         this.ScaleFactor := 1.5 ; 鍵盤縮放比例 (預設 1.5)
-
+        this.FontSizeIndex := 2 ; 當前字級索引 (預設為 1.5)
+        this.FontSizeLevels := [1.0, 1.5, 2.0, 2.5] ; 可切換的字級大小
+        
         this.CurrentX := 0 ; 儲存當前 X 座標
         this.CurrentY := 0 ; 儲存當前 Y 座標
         
-        this.isMinimized := false ; 新增：用於追蹤最小化狀態
-        this.lastState := {}     ; 新增：用於儲存最小化前的位置和尺寸
+        this.isMinimized := false ; 用於追蹤最小化狀態
+        this.lastState := {}     ; 用於儲存最小化前的位置和尺寸
 
         this.Keys := [] ; 鍵名與座標映射
         this.Controls := [] ; 控件 HWND 儲存
@@ -51,8 +74,8 @@ Class OSK
         this.Background := "2A2A2A"     ; 鍵盤背景 (深灰)
         this.ButtonColour := "010101"   ; 按鈕主色 (深黑色)
         this.ClickFeedbackColour := "0078D7" ; 點擊回饋顏色 (亮藍色)
-        this.ToggledButtonColour := "553b6a" ; 鎖定/已切換按鈕顏色 (深紫色)
-        this.TextColour := "ffffff"     ; 主要文字顏色 (白色)
+        this.ToggledButtonColour := "553B6A" ; 鎖定已切換按鈕顏色 (深紫色)
+        this.TextColour := "FFFFFF"     ; 主要文字顏色 (白色)
         this.ShiftSymbolColour := "ADD8E6" ; Shift 符號顏色 (淡藍色)
         this.SecondLineColour := "FFA500"  ; 第二行文字顏色 (橘色/注音色)
 
@@ -69,112 +92,111 @@ Class OSK
 
         this.Layout := []
 
-        if (layout = "bopomofo") {
-            
-            StdKey := 45 ; 標準鍵寬
-            
-            ; Row 1: 功能鍵 (Esc, 移動, 縮放, 重設, 透明度, 關閉, 隱藏)
-            this.Layout.Push([ ["sc001", StdKey], ["Move", 355], ["ZoomOut", StdKey], ["ZoomIn", StdKey], ["Reset", StdKey], ["Transparent"], ["Close", StdKey], ["Hide", StdKey] ]) 
-            
-            ; Row 2: 數字列
-            this.Layout.Push([ ["sc029", StdKey],["sc002", StdKey],["sc003", StdKey],["sc004", StdKey],["sc005", StdKey],["sc006", StdKey],["sc007", StdKey],["sc008", StdKey],["sc009", StdKey],["sc00a", StdKey],["sc00b", StdKey],["sc00c", StdKey],["sc00d", StdKey],["sc00e", 63] ])
-            
-            ; Row 3: QWERTY 列
-            this.Layout.Push([ ["sc00f", 67.5],["sc010", StdKey],["sc011", StdKey],["sc012", StdKey],["sc013", StdKey],["sc014", StdKey],["sc015", StdKey],["sc016", StdKey],["sc017", StdKey],["sc018", StdKey],["sc019", StdKey],["sc01a", StdKey],["sc01b", StdKey],["sc02b", 41] ])
+        StdKey := 45 ; 標準鍵寬
+        
+        ; Row 1: 功能鍵 (Esc, 移動, 縮放, 字級, 重設, 透明度, 關閉)
+        ; 移除 "Hide" (隱藏) 鍵，並將騰出的空間 (47 單位) 加到 "Move" 鍵上 (310 -> 357)
+        this.Layout.Push([ ["sc001", StdKey], ["Move", 357], ["ZoomOut", StdKey], ["ZoomIn", StdKey], ["FontSize", StdKey], ["Reset", StdKey], ["Transparent"], ["Close", StdKey] ]) 
+        
+        ; Row 2: 數字列
+        this.Layout.Push([ ["sc029", StdKey],["sc002", StdKey],["sc003", StdKey],["sc004", StdKey],["sc005", StdKey],["sc006", StdKey],["sc007", StdKey],["sc008", StdKey],["sc009", StdKey],["sc00a", StdKey],["sc00b", StdKey],["sc00c", StdKey],["sc00d", StdKey],["sc00e", 63] ])
+        
+        ; Row 3: QWERTY 列
+        this.Layout.Push([ ["sc00f", 67.5],["sc010", StdKey],["sc011", StdKey],["sc012", StdKey],["sc013", StdKey],["sc014", StdKey],["sc015", StdKey],["sc016", StdKey],["sc017", StdKey],["sc018", StdKey],["sc019", StdKey],["sc01a", StdKey],["sc01b", StdKey],["sc02b", 41] ])
 
-            ; Row 4: ASDFG 列
-            this.Layout.Push([ ["sc03a", 90],["sc01e", StdKey],["sc01f", StdKey],["sc020", StdKey],["sc021", StdKey],["sc022", StdKey],["sc023", StdKey],["sc024", StdKey],["sc025", StdKey],["sc026", StdKey],["sc027", StdKey],["sc028", StdKey],["sc01c", 67] ])
-            
-            ; Row 5: ZXCVB 列
-            this.Layout.Push([ ["sc02a", 112.5],["sc02c", StdKey],["sc02d", StdKey],["sc02e", StdKey],["sc02f", StdKey],["sc030", StdKey],["sc031", StdKey],["sc032", StdKey],["sc033", StdKey],["sc034", StdKey],["sc035", StdKey], ["sc048", 45], ["sc053", 44.5] ]) 
-            
-            ; Row 6: LCtrl/LWin/LAlt/Space/箭頭鍵
-            this.Layout.Push([ ["sc01d", 60], ["sc05b", 60], ["sc038", 60], ["sc039", 360], ["sc04b", 45], ["sc050", 45], ["sc04d", 45] ]) 
-            
-            ; 按鍵顯示文字 (使用掃描碼)
-            this.PrettyName := {} 
-            this.PrettyName["Move"]        := "移動"
-            this.PrettyName["Transparent"] := "透明"
-            this.PrettyName["Close"]       := "關閉"
-            this.PrettyName["Hide"]        := "隱藏"
-            this.PrettyName["ZoomOut"]     := "縮小"
-            this.PrettyName["ZoomIn"]      := "放大"
-            this.PrettyName["Reset"]       := "重設" 
-            this.PrettyName["placeholder"] := ""
-            
-            ; 修飾鍵和特殊功能鍵
-            this.PrettyName["sc001"]       := "Esc"       
-            this.PrettyName["sc00e"]       := "BS"       ; Backspace
-            this.PrettyName["sc00f"]       := "Tab"       
-            this.PrettyName["sc03a"]       := "Caps Lock" 
-            this.PrettyName["sc01c"]       := "Enter"     
-            this.PrettyName["sc02a"]       := "Shift"     ; LShift
-            this.PrettyName["sc036"]       := "Shift"     ; RShift
-            this.PrettyName["sc01d"]       := "Ctrl"      ; LCtrl
-            this.PrettyName["sc05b"]       := "Win"       ; LWin
-            this.PrettyName["sc038"]       := "Alt"       ; LAlt
-            this.PrettyName["sc039"]       := "Space"     ; Space
-            this.PrettyName["sc048"]       := "↑"         ; Up
-            this.PrettyName["sc050"]       := "↓"         ; Down
-            this.PrettyName["sc04b"]       := "←"         ; Left
-            this.PrettyName["sc04d"]       := "→"         ; Right
-            this.PrettyName["sc053"]       := "Del"       
-            
-            ; 數字/符號/注音鍵定義
-            this.PrettyName["sc029"]       := "`` ~"
-            this.PrettyName["sc002"]       := "1 ! ㄅ"
-            this.PrettyName["sc003"]       := "2 @ ㄉ"
-            this.PrettyName["sc004"]       := "3 # ˇ"
-            this.PrettyName["sc005"]       := "4 $ ˋ"
-            this.PrettyName["sc006"]       := "5 % ㄓ"
-            this.PrettyName["sc007"]       := "6 ^ ˊ"
-            this.PrettyName["sc008"]       := "7 && ˙"
-            this.PrettyName["sc009"]       := "8 * ㄚ"
-            this.PrettyName["sc00a"]       := "9 ( ㄞ"
-            this.PrettyName["sc00b"]       := "0 ) ㄢ"
-            this.PrettyName["sc00c"]       := "- _ ㄦ"
-            this.PrettyName["sc00d"]       := "= +"
-            
-            ; QWERTY 列定義
-            this.PrettyName["sc010"]       := "Q ㄆ"
-            this.PrettyName["sc011"]       := "W ㄊ"
-            this.PrettyName["sc012"]       := "E ㄍ"
-            this.PrettyName["sc013"]       := "R ㄐ"
-            this.PrettyName["sc014"]       := "T ㄔ"
-            this.PrettyName["sc015"]       := "Y ㄗ"
-            this.PrettyName["sc016"]       := "U ㄧ"
-            this.PrettyName["sc017"]       := "I ㄛ"
-            this.PrettyName["sc018"]       := "O ㄟ"
-            this.PrettyName["sc019"]       := "P ㄣ"
-            this.PrettyName["sc01a"]       := "[ {"
-            this.PrettyName["sc01b"]       := "] }"
-            this.PrettyName["sc02b"]       := "\ |"
-            
-            ; ASDFG 列定義
-            this.PrettyName["sc01e"]       := "A ㄇ"
-            this.PrettyName["sc01f"]       := "S ㄋ"
-            this.PrettyName["sc020"]       := "D ㄎ" ; 更正：D 應為 ㄎ
-            this.PrettyName["sc021"]       := "F ㄑ"
-            this.PrettyName["sc022"]       := "G ㄕ"
-            this.PrettyName["sc023"]       := "H ㄘ"
-            this.PrettyName["sc024"]       := "J ㄨ"
-            this.PrettyName["sc025"]       := "K ㄜ"
-            this.PrettyName["sc026"]       := "L ㄠ"
-            this.PrettyName["sc027"]       := "; : ㄤ" 
-            this.PrettyName["sc028"]       := "' """ 
-            
-            ; ZXCVB 列定義
-            this.PrettyName["sc02c"]       := "Z ㄈ"
-            this.PrettyName["sc02d"]       := "X ㄌ"
-            this.PrettyName["sc02e"]       := "C ㄏ"
-            this.PrettyName["sc02f"]       := "V ㄒ"
-            this.PrettyName["sc030"]       := "B ㄖ"
-            this.PrettyName["sc031"]       := "N ㄙ"
-            this.PrettyName["sc032"]       := "M ㄩ"
-            this.PrettyName["sc033"]       := ", < ㄝ" 
-            this.PrettyName["sc034"]       := ". > ㄡ" 
-            this.PrettyName["sc035"]       := "/ ? ㄥ" 
-        }
+        ; Row 4: ASDFG 列
+        this.Layout.Push([ ["sc03a", 90],["sc01e", StdKey],["sc01f", StdKey],["sc020", StdKey],["sc021", StdKey],["sc022", StdKey],["sc023", StdKey],["sc024", StdKey],["sc025", StdKey],["sc026", StdKey],["sc027", StdKey],["sc028", StdKey],["sc01c", 67] ])
+        
+        ; Row 5: ZXCVB 列
+        this.Layout.Push([ ["sc02a", 112.5],["sc02c", StdKey],["sc02d", StdKey],["sc02e", StdKey],["sc02f", StdKey],["sc030", StdKey],["sc031", StdKey],["sc032", StdKey],["sc033", StdKey],["sc034", StdKey],["sc035", StdKey], ["sc048", 45], ["sc053", 44.5] ]) 
+        
+        ; Row 6: LCtrl/LWin/LAlt/Space/箭頭鍵
+        this.Layout.Push([ ["sc01d", 60], ["sc05b", 60], ["sc038", 60], ["sc039", 360], ["sc04b", 45], ["sc050", 45], ["sc04d", 45] ]) 
+        
+        ; 按鍵顯示文字 (使用掃描碼)
+        this.PrettyName := {} 
+        this.PrettyName["Move"]        := "移動"
+        this.PrettyName["Transparent"] := "透明"
+        this.PrettyName["Close"]       := "關閉"
+        this.PrettyName["ZoomOut"]     := "縮小"
+        this.PrettyName["ZoomIn"]      := "放大"
+        this.PrettyName["Reset"]       := "重設" 
+        this.PrettyName["FontSize"]    := "字級"
+        this.PrettyName["placeholder"] := ""
+        
+        ; 修飾鍵和特殊功能鍵
+        this.PrettyName["sc001"]       := "Esc"       
+        this.PrettyName["sc00e"]       := "BS"       ; Backspace
+        this.PrettyName["sc00f"]       := "Tab"       
+        this.PrettyName["sc03a"]       := "Caps Lock" 
+        this.PrettyName["sc01c"]       := "Enter"     
+        this.PrettyName["sc02a"]       := "Shift"     ; LShift
+        this.PrettyName["sc036"]       := "Shift"     ; RShift
+        this.PrettyName["sc01d"]       := "Ctrl"      ; LCtrl
+        this.PrettyName["sc05b"]       := "Win"       ; LWin
+        this.PrettyName["sc038"]       := "Alt"       ; LAlt
+        this.PrettyName["sc039"]       := "Space"     ; Space
+        this.PrettyName["sc048"]       := "↑"         ; Up
+        this.PrettyName["sc050"]       := "↓"         ; Down
+        this.PrettyName["sc04b"]       := "←"         ; Left
+        this.PrettyName["sc04d"]       := "→"         ; Right
+        this.PrettyName["sc053"]       := "Del"       
+        
+        ; 數字/符號/注音鍵定義
+        this.PrettyName["sc029"]       := "`` ~"
+        this.PrettyName["sc002"]       := "1 ! ㄅ"
+        this.PrettyName["sc003"]       := "2 @ ㄉ"
+        this.PrettyName["sc004"]       := "3 # ˇ"
+        this.PrettyName["sc005"]       := "4 $ ˋ"
+        this.PrettyName["sc006"]       := "5 % ㄓ"
+        this.PrettyName["sc007"]       := "6 ^ ˊ"
+        this.PrettyName["sc008"]       := "7 && ˙"
+        this.PrettyName["sc009"]       := "8 * ㄚ"
+        this.PrettyName["sc00a"]       := "9 ( ㄞ"
+        this.PrettyName["sc00b"]       := "0 ) ㄢ"
+        this.PrettyName["sc00c"]       := "- _ ㄦ"
+        this.PrettyName["sc00d"]       := "= +"
+        
+        ; QWERTY 列定義
+        this.PrettyName["sc010"]       := "Q ㄆ"
+        this.PrettyName["sc011"]       := "W ㄊ"
+        this.PrettyName["sc012"]       := "E ㄍ"
+        this.PrettyName["sc013"]       := "R ㄐ"
+        this.PrettyName["sc014"]       := "T ㄔ"
+        this.PrettyName["sc015"]       := "Z ㄗ"
+        this.PrettyName["sc016"]       := "U ㄧ"
+        this.PrettyName["sc017"]       := "I ㄛ"
+        this.PrettyName["sc018"]       := "O ㄟ"
+        this.PrettyName["sc019"]       := "P ㄣ"
+        this.PrettyName["sc01a"]       := "[ {"
+        this.PrettyName["sc01b"]       := "] }"
+        this.PrettyName["sc02b"]       := "\ |"
+        
+        ; ASDFG 列定義
+        this.PrettyName["sc01e"]       := "A ㄇ"
+        this.PrettyName["sc01f"]       := "S ㄋ"
+        this.PrettyName["sc020"]       := "D ㄎ"
+        this.PrettyName["sc021"]       := "F ㄑ"
+        this.PrettyName["sc022"]       := "G ㄕ"
+        this.PrettyName["sc023"]       := "H ㄘ"
+        this.PrettyName["sc024"]       := "J ㄨ"
+        this.PrettyName["sc025"]       := "K ㄜ"
+        this.PrettyName["sc026"]       := "L ㄠ"
+        this.PrettyName["sc027"]       := "; : ㄤ" 
+        this.PrettyName["sc028"]       := "' """ 
+        
+        ; ZXCVB 列定義
+        this.PrettyName["sc02c"]       := "Z ㄈ"
+        this.PrettyName["sc02d"]       := "X ㄌ"
+        this.PrettyName["sc02e"]       := "C ㄏ"
+        this.PrettyName["sc02f"]       := "V ㄒ"
+        this.PrettyName["sc030"]       := "B ㄖ"
+        this.PrettyName["sc031"]       := "N ㄙ"
+        this.PrettyName["sc032"]       := "M ㄩ"
+        this.PrettyName["sc033"]       := ", < ㄝ" 
+        this.PrettyName["sc034"]       := ". > ㄡ" 
+        this.PrettyName["sc035"]       := "/ ? ㄥ" 
+        
         this.Make()
     }
 
@@ -195,13 +217,18 @@ Class OSK
         CurrentY := Round(10 * ScaleFactor) 
         MarginLeft := Round(10 * ScaleFactor) ; 左右/底部邊界
         
-        MaxRightEdge := 0 ; 新增: 追蹤最右邊按鍵的 X 座標 + 寬度
-        LastButtonY := 0   ; 新增: 追蹤最後一個按鍵的 Y 座標
+        MaxRightEdge := 0 ; 追蹤最右邊按鍵的 X 座標 + 寬度
+        LastButtonY := 0   ; 追蹤最後一個按鍵的 Y 座標
 
         
         ; GUI 基本設定
         Gui, OSK: +AlwaysOnTop -DPIScale +Owner -Caption +E0x08000000 
-        Gui, OSK: Font, s8, Microsoft JhengHei UI 
+        
+        ; 根據 ScaleFactor 動態調整字體大小 (字級)
+        BaseFontSize := 6 ; 定義在 ScaleFactor=1.0 時的基礎字級
+        DynamicFontSize := Round(BaseFontSize * ScaleFactor) ; 依據 ScaleFactor 調整字級
+        Gui, OSK: Font, s%DynamicFontSize%, Microsoft JhengHei UI 
+        
         Gui, OSK: Margin, 0, 0
         Gui, OSK: Color, % this.Background
 
@@ -242,8 +269,10 @@ Class OSK
                                   or KeyText = "sc038" or KeyText = "sc039" or KeyText = "sc053" 
                                   or KeyText = "sc048" or KeyText = "sc050" or KeyText = "sc04b" 
                                   or KeyText = "sc04d" or KeyText = "Move" or KeyText = "Transparent" 
-                                  or KeyText = "Hide" or KeyText = "Close" 
-                                  or KeyText = "ZoomOut" or KeyText = "ZoomIn" or KeyText = "Reset")
+                                  ; 移除 "Hide"
+                                  or KeyText = "Close" 
+                                  or KeyText = "ZoomOut" or KeyText = "ZoomIn" or KeyText = "Reset"
+                                  or KeyText = "FontSize") ; 新增 FontSize
                                   
                     labels := [] 
                     BopomofoChars := "ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙㄧㄨㄩㄚㄛㄜㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦˊˇˋ˙"
@@ -317,7 +346,7 @@ Class OSK
             }
         }
         
-        ; 新增: 計算精確的總寬高，移除多餘的灰色背景
+        ; 計算精確的總寬高，移除多餘的灰色背景
         ; 總寬度 = 最右邊的按鍵右邊緣 (MaxRightEdge) + MarginLeft (作為右側的邊界)
         TotalWidth := MaxRightEdge + MarginLeft
         ; 總高度 = 最後一個按鍵的 Y 座標 (LastButtonY) + 高度 (ButtonHeight) + MarginLeft (作為底部的邊界)
@@ -342,6 +371,23 @@ Class OSK
 
         if (Round(new_scale, 2) != Round(this.ScaleFactor, 2)) {
             this.ScaleFactor := new_scale
+            ; 重設字級索引，因為是手動縮放，不再屬於預設切換範圍
+            this.FontSizeIndex := 0 
+            ; 注意: 這裡會呼叫 RebuildGUI()
+            this.RebuildGUI() 
+        }
+    }
+    
+    ; 循環切換預設字級大小
+    ToggleFontSize() {
+        ; 循環切換索引
+        this.FontSizeIndex := Mod(this.FontSizeIndex, this.FontSizeLevels.Length()) + 1
+        
+        new_scale := this.FontSizeLevels[this.FontSizeIndex]
+        
+        if (Round(new_scale, 2) != Round(this.ScaleFactor, 2)) {
+            this.ScaleFactor := new_scale
+            ; 注意: 這裡會呼叫 RebuildGUI()
             this.RebuildGUI()
         }
     }
@@ -351,6 +397,8 @@ Class OSK
         DefaultScale := 1.5 
         if (this.ScaleFactor != DefaultScale) {
             this.ScaleFactor := DefaultScale
+            this.FontSizeIndex := 2 ; 重設為 1.5 的索引
+            ; 注意: 這裡會呼叫 RebuildGUI()
             this.RebuildGUI()
         }
     }
@@ -374,41 +422,58 @@ Class OSK
         ; 3. 重新建立 GUI
         this.Make()
         
-        Sleep, 50 
-        
-        ; 4. 使用上次儲存的位置顯示，並重新設定透明度
+        ; 4. 使用上次儲存的位置顯示
         GUI_X := this.CurrentX
         GUI_Y := this.CurrentY
         
+        Gui, OSK:Show, % "x" GUI_X " y" GUI_Y " NA", 螢幕鍵盤
+        
+        ; 5. *** 在 GUI 顯示後再應用透明度，以確保 WinSet 成功執行。***
         ; 透明度等級列表
         trans_levels := [255, 220, 180, 100]
+        ; 使用視窗標題來設定透明度
         WinSet, Transparent, % trans_levels[this.current_trans], 螢幕鍵盤
-
-        Gui, OSK:Show, % "x" GUI_X " y" GUI_Y " NA", 螢幕鍵盤
     }
 
     ; 顯示鍵盤
     Show() {
         this.Enabled := True
-        CurrentMonitorIndex := this.GetCurrentMonitorIndex()
-        DetectHiddenWindows On
-        Gui, OSK: +LastFound
-        Gui, OSK:Show, Hide
-        GUI_Hwnd := WinExist()
-        this.GetClientSize(GUI_Hwnd,GUI_Width,GUI_Height)
-        DetectHiddenWindows Off
         
-        ; 計算初始置中位置 (螢幕工作區底部中央)
-        SysGet, MonWA, MonitorWorkArea, %CurrentMonitorIndex%
+        ; 檢查是否為首次顯示。如果是 (CurrentX/Y 為初始值 0)，則計算預設位置。
+        ; 否則，直接使用上次由 Hide() 方法儲存的位置。
+        isFirstShow := (this.CurrentX = 0 and this.CurrentY = 0)
+
+        if (isFirstShow) {
+            ; 首次顯示：計算初始置中位置
+            CurrentMonitorIndex := this.GetCurrentMonitorIndex()
+            DetectHiddenWindows On
+            Gui, OSK: +LastFound
+            Gui, OSK:Show, Hide ; 暫時顯示以取得尺寸，才能計算置中
+            GUI_Hwnd := WinExist()
+            this.GetClientSize(GUI_Hwnd,GUI_Width,GUI_Height)
+            DetectHiddenWindows Off
+            
+            SysGet, MonWA, MonitorWorkArea, %CurrentMonitorIndex%
+            
+            GUI_X := ((MonWARight - MonWALeft - GUI_Width) / 2) + MonWALeft
+            GUI_Y := MonWABottom - GUI_Height
+            
+            ; 儲存這個初始位置，供下次 Hide() 後使用
+            this.CurrentX := GUI_X
+            this.CurrentY := GUI_Y
+        } else {
+            ; 非首次顯示：直接使用上次儲存的位置
+            GUI_X := this.CurrentX
+            GUI_Y := this.CurrentY
+        }
         
-        GUI_X := ((MonWARight - MonWALeft - GUI_Width) / 2) + MonWALeft
-        GUI_Y := MonWABottom - GUI_Height
-        
-        ; 首次顯示時，儲存預設位置
-        this.CurrentX := GUI_X
-        this.CurrentY := GUI_Y
-        
+        ; 使用計算好或儲存好的位置來顯示視窗
         Gui, OSK:Show, % "x" GUI_X " y" GUI_Y " NA", 螢幕鍵盤
+        
+        ; 首次顯示時也應應用預設透明度
+        trans_levels := [255, 220, 180, 100]
+        WinSet, Transparent, % trans_levels[this.current_trans], 螢幕鍵盤
+        
         ; 啟用按鍵狀態監控計時器
         this.SetTimer("MonitorKeyPresses", 30)
         Return
@@ -416,6 +481,17 @@ Class OSK
     
     ; 隱藏鍵盤
     Hide() {
+        ; 在隱藏前，儲存當前視窗的位置。
+        ; 這樣 Show() 才能在同一個地方還原它。
+        DetectHiddenWindows On
+        IfWinExist, 螢幕鍵盤
+        {
+            WinGetPos, currentX, currentY, , , 螢幕鍵盤
+            this.CurrentX := currentX
+            this.CurrentY := currentY
+        }
+        DetectHiddenWindows Off
+
         this.Enabled := False
         Gui, OSK: Hide
         ; 關閉按鍵狀態監控計時器
@@ -432,32 +508,25 @@ Class OSK
         Return
     }
 
-    ; 新增：切換最小化/還原狀態
+    ; 切換最小化/還原狀態
     ToggleMinimize() {
         if (this.isMinimized) {
             ; --- 還原視窗 ---
             ; 1. 還原 ScaleFactor
             this.ScaleFactor := this.lastState.ScaleFactor
             
-            ; 2. 重建 GUI (此步驟會產生一個新的大尺寸鍵盤，但位置在右下角)
+            ; 2. 重建 GUI (此步驟會產生一個新的大尺寸鍵盤，並自動還原 this.current_trans 透明度)
             this.RebuildGUI()
             
             ; 3. 移動回原來的位置
-            Gui, OSK: +LastFound
-            hwnd := WinExist()
-            WinMove, % "ahk_id " hwnd, , this.lastState.X, this.lastState.Y
-
-            ; 4. 從上次的設定還原透明度
-            trans_levels := [255, 220, 180, 100]
-            WinSet, Transparent, % trans_levels[this.current_trans], 螢幕鍵盤
+            WinMove, 螢幕鍵盤, , this.lastState.X, this.lastState.Y
 
             this.isMinimized := false
         } else {
             ; --- 最小化視窗 ---
             ; 1. 儲存目前狀態 (位置和縮放比例)
-            Gui, OSK: +LastFound
-            hwnd := WinExist()
-            WinGetPos, currentX, currentY, , , % "ahk_id " hwnd
+            IfWinExist, 螢幕鍵盤
+                WinGetPos, currentX, currentY, , , 螢幕鍵盤
             this.lastState := {X: currentX, Y: currentY, ScaleFactor: this.ScaleFactor}
 
             ; 2. 設定新的縮小比例
@@ -467,16 +536,20 @@ Class OSK
             this.RebuildGUI()
             
             ; 4. 將新的小鍵盤移動到螢幕右下角
-            Gui, OSK: +LastFound
-            hwnd_small := WinExist()
-            this.GetClientSize(hwnd_small, newW, newH)
-            
-            SysGet, MonWA, MonitorWorkArea, 1
-            newX := MonWARight - newW - 10 ; 加上一點邊界
-            newY := MonWABottom - newH - 10 ; 加上一點邊界
-            
-            WinMove, % "ahk_id " hwnd_small, , newX, newY
-            WinSet, Transparent, 150, % "ahk_id " hwnd_small ; 設定半透明
+            IfWinExist, 螢幕鍵盤
+            {
+                Gui, OSK: +LastFound
+                hwnd_small := WinExist()
+                this.GetClientSize(hwnd_small, newW, newH)
+                
+                SysGet, MonWA, MonitorWorkArea, 1
+                newX := MonWARight - newW - 10 ; 加上一點邊界
+                newY := MonWABottom - newH - 10 ; 加上一點邊界
+                
+                WinMove, 螢幕鍵盤, , newX, newY
+                ; 在最小化狀態下，強制設定為半透明，作為視覺指示
+                WinSet, Transparent, 150, 螢幕鍵盤 
+            }
 
             this.isMinimized := true
         }
@@ -491,9 +564,27 @@ Class OSK
 
     ; 提示使用者確認關閉程式
     ConfirmClose() {
+        ; 儲存當前狀態，以便如果使用者選擇 "No" 可以還原
+        was_enabled := this.Enabled
+        
+        ; 如果鍵盤是顯示狀態，先隱藏它，防止蓋住 MsgBox
+        if (was_enabled) {
+            this.Hide()
+        }
+
         MsgBox, 4, 關閉確認, 是否確定要關閉螢幕鍵盤程式？
+        
         IfMsgBox, Yes
             ExitApp ; 關閉整個腳本
+        
+        ; 如果使用者選擇 "No"，且鍵盤本來是顯示狀態，則重新顯示
+        IfMsgBox, No
+        {
+            if (was_enabled) {
+                this.Show()
+            }
+        }
+
         Return
     }
 
@@ -548,16 +639,16 @@ Class OSK
         } else if (Key = "Reset") { 
             this.ResetScale() ; 重設尺寸
             Return
+        } else if (Key = "FontSize") { ; 新增字級按鍵處理
+            this.ToggleFontSize() ; 切換預設字級
+            Return
         } else if (Key = "Transparent") {
             this.ToggleTransparent() ; 切換透明度
             Return
         } else if (Key = "Close") {
             this.ConfirmClose() ; 關閉程式確認
             Return
-        } else if (Key = "Hide") {
-            this.ToggleMinimize() ; 修改：呼叫新的最小化/還原功能
-            Return
-        }
+        } 
         
         ; 處理複合鍵 (Shift, Ctrl, Alt, Win, CapsLock)
         if (this.IsModifier(Key))
