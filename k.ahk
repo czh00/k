@@ -2,7 +2,6 @@
 SendMode Input
 
 ; 程式啟動與熱鍵設定
-If (A_ScriptFullPath = A_LineFile) { 
     Global keyboard := new OSK()
 
     ; 設定熱鍵 Ctrl+Shift+O 來顯示或隱藏鍵盤
@@ -13,7 +12,7 @@ If (A_ScriptFullPath = A_LineFile) {
     closeConfirm := ObjBindMethod(keyboard, "ConfirmClose") 
 
     ; === 系統托盤圖示設定 (單擊切換顯示/隱藏) ===
-    Menu, Tray, NoStandard ; [修正] 移除預設的「Exit」等標準選單項目
+    Menu, Tray, NoStandard
     
     ; 1. 設置托盤單擊動作 (Click, 1) 為執行第一個菜單項
     Menu, Tray, Click, 1
@@ -31,7 +30,6 @@ If (A_ScriptFullPath = A_LineFile) {
     ; =======================================================
     
     keyboard.Show()
-}
 Return 
 
 ; 語境敏感熱鍵
@@ -272,8 +270,7 @@ Class OSK
                                   ; 移除 "Hide"
                                   or KeyText = "Close" 
                                   or KeyText = "ZoomOut" or KeyText = "ZoomIn" or KeyText = "Reset"
-                                  or KeyText = "FontSize") ; 新增 FontSize
-                                  
+                                  or KeyText = "FontSize")                                  
                     labels := [] 
                     BopomofoChars := "ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙㄧㄨㄩㄚㄛㄜㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦˊˇˋ˙"
                     
@@ -639,7 +636,7 @@ Class OSK
         } else if (Key = "Reset") { 
             this.ResetScale() ; 重設尺寸
             Return
-        } else if (Key = "FontSize") { ; 新增字級按鍵處理
+        } else if (Key = "FontSize") { ; 字級按鍵處理
             this.ToggleFontSize() ; 切換預設字級
             Return
         } else if (Key = "Transparent") {
