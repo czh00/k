@@ -1,79 +1,62 @@
 就是有注音標籤的OSK，執行後隱藏與顯示的熱鍵是Ctrl+Shift+O。
-螢幕鍵盤 (AutoHotkey OSK)
-這是一個使用 AutoHotkey v2 撰寫的輕量級螢幕鍵盤（On-Screen Keyboard, OSK）程式。它旨在提供一個可自訂大小、半透明、具備按鍵狀態鎖定視覺回饋的虛擬鍵盤，特別針對同時需要中文（注音）輸入符號提示的使用者設計。
+AHK 繁體中文螢幕小鍵盤 (AHK Traditional Chinese On-Screen Keyboard)
+這是一個使用 AutoHotkey v1.1 編寫的功能齊全、可高度自訂的螢幕小鍵盤。它特別為需要繁體中文（注音）輸入法的使用者設計，同時也提供標準的 QWERTY 英文佈局。
 
-✨ 主要特色
-繁體中文輸入支援： 按鍵上同時顯示 字母、數字/符號、以及注音符號 (如：Q ㄆ, J ㄨ)，方便中文使用者快速定位。
+This is a full-featured, highly customizable on-screen keyboard written in AutoHotkey v1.1. It is especially designed for users who need Traditional Chinese (Bopomofo/Zhuyin) input, while also providing a standard QWERTY English layout.
 
-深色主題： 預設採用黑色的簡潔 UI 設計。
+✨ 功能特色 (Features)
+雙語言佈局 (Dual Layouts):
 
-修飾鍵狀態視覺化： 實時監控並以深紫色高亮顯示被鎖定或持續按下的修飾鍵（如 Shift, Ctrl, Alt, Caps Lock）。
+QWERTY: 標準英文鍵盤佈局。
 
-多種自訂功能： 支援即時縮放、循環切換字級大小、調整透明度、以及拖曳移動。
+注音 (Bopomofo): 台灣使用者慣用的繁體中文注音輸入法佈局。
 
-單檔案可執行： 程式碼精簡，只需 AutoHotkey 環境即可運行。
+可透過 Ctrl + Space 或專用按鍵快速切換。
 
-🖥️ 畫面預覽 (模擬)
-🚀 如何使用
-1. 必要條件
-您需要在您的 Windows 系統上安裝 AutoHotkey v2。
+深色主題 (Dark Theme): 預設採用時尚的深色主題，減少視覺疲勞 (顏色可於腳本內自訂)。
 
-2. 執行
-下載 k.ahk 檔案。
+動態縮放 (Scalable): 可透過鍵盤上的 ⊕ (放大) 和 ⊖ (縮小) 按鈕即時調整鍵盤大小。
 
-雙擊執行 k.ahk 即可。
+透明度調整 (Transparency Control): 提供多段式透明度切換，讓鍵盤在不使用時能融入背景。
 
-程式啟動後，會自動顯示螢幕鍵盤，並在系統托盤（通知區域）中加入圖示。
+即時狀態同步 (Real-time Key State Sync): 當您按下實體鍵盤的修飾鍵 (如 Shift, Ctrl, CapsLock) 時，螢幕小鍵盤上的對應按鍵會同步變色，清楚顯示當前狀態。
 
-3. 熱鍵與功能
-熱鍵/按鈕
+高相容性 (High Compatibility): 使用 SendMode Input 和 Blind 模式發送按鍵，確保在大多數應用程式和遊戲中都能穩定運作。
 
-功能說明
+人性化設計 (User-Friendly):
 
-Ctrl + Shift + O
+支援點擊鍵盤空白處拖動視窗。
 
-快速切換鍵盤的顯示或隱藏狀態。
+點擊時不搶佔當前視窗焦點 (WS_EX_NOACTIVATE)。
 
-系統托盤圖示
+提供系統匣圖示選單，方便快速操作及退出。
 
-單擊圖示可切換顯示/隱藏。右鍵可選單操作。
+🔧 需求 (Requirements)
+AutoHotkey v1.1 或更新版本。 (注意：此腳本與 v2.0 不相容)
 
-移動 按鈕
+🚀 如何使用 (How to Use)
+安裝 AutoHotkey: 如果您尚未安裝，請至 AutoHotkey 官方網站 下載並安裝 v1.1 版本。
 
-點擊並按住可拖曳鍵盤到螢幕任意位置。
+下載腳本: 下載本專案中的 k_annotated.ahk 檔案。
 
-放大 / 縮小
+執行: 直接雙擊 k_annotated.ahk 檔案即可執行。您將會在系統右下角的系統匣中看到一個新的 AutoHotkey 圖示。
 
-依比例調整鍵盤的整體尺寸。
+⌨️ 快捷鍵 (Hotkeys)
+Ctrl + Shift + O : 顯示 / 隱藏螢幕鍵盤。
 
-字級 按鈕
+Ctrl + Space : 切換鍵盤的「英文」與「注音」佈局 (此操作同時也會發送系統的中英文輸入法切換指令)。
 
-循環切換預設的字體大小（1.0x, 1.5x, 2.0x, 2.5x）。
+🎨 自訂 (Customization)
+您可以輕易地修改腳本來自訂鍵盤的外觀。打開 k_annotated.ahk 檔案，在 OSK 類別的 __New 方法中找到以下顏色變數並修改其 16 進位色碼：
 
-重設 按鈕
+; --- 顏色主題設定 (Color Theme Settings) ---
+this.Background := "2A2A2A"          ; GUI 背景色
+this.ButtonColour := "010101"        ; 按鈕預設顏色
+this.ClickFeedbackColour := "0078D7" ; 按鈕點擊時的瞬間回饋顏色
+this.ToggledButtonColour := "553b6a" ; 當修飾鍵處於 "開啟" 狀態時的顏色
+this.TextColour := "ffffff"          ; 主要文字顏色
+this.ShiftSymbolColour := "ADD8E6"   ; 按下 Shift 時，第二層符號的顏色
+this.SecondLineColour := "FFA500"    ; 注音模式下，注音符號的顏色
 
-將鍵盤尺寸還原到預設大小（1.5x）。
-
-透明 按鈕
-
-循環切換鍵盤的透明度等級（完全不透明、微透、半透、高透）。
-
-關閉 按鈕
-
-提示確認後關閉程式。
-
-修飾鍵 (Shift/Ctrl/Alt/Win)
-
-點擊一次會鎖定該按鍵狀態（持續按下），再點擊一次則釋放。鎖定時按鈕會變成深紫色。
-
-🛠️ 開發細節 (AHK Class)
-本程式採用 AutoHotkey 的 Class 結構來封裝所有 GUI 建立、按鍵處理、狀態監控和視窗管理邏輯，提高了程式碼的組織性和可維護性。
-
-OSK Class： 包含所有核心邏輯，如 Make() (繪製 GUI)、HandleOSKClick() (處理點擊)、MonitorAllKeys() (狀態監控)。
-
-動態繪製： 鍵盤是根據 this.Layout 陣列動態計算並繪製的，這使得調整按鍵配置相對容易。
-
-掃描碼輸入： 所有的按鍵點擊都使用掃描碼（scXXX）進行 SendInput，確保與各種應用程式和遊戲的相容性。
-
-🤝 貢獻
-如果您發現任何 Bug 或有功能建議，歡迎提出 Issue 或發起 Pull Request！
+📄 授權 (License)
+本專案採用 MIT 授權。
