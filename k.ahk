@@ -22,6 +22,12 @@ If (A_ScriptFullPath = A_LineFile) {
     toggleLayout := ObjBindMethod(keyboard, "ToggleLayout")
     Hotkey, ~$^Space, % toggleLayout ; 新增 "~" 前綴讓按鍵可穿透
 
+    ; *** 核心修改：註冊視窗訊息監聽 ***
+    ; 監聽 WM_LBUTTONDOWN (0x201) 這個 Windows 訊息。
+    ; 每當此腳本的任何 GUI 視窗收到「滑鼠左鍵按下」的訊息時，
+    ; 就會自動呼叫 HandleBackgroundClick 函式來進行處理。
+    OnMessage(0x201, "HandleBackgroundClick")
+
     keyboard.Show()
 }
 Return 
@@ -35,18 +41,42 @@ ExitHandler:
     ExitApp
     return
 
+; *** 新增函式：處理 GUI 背景點擊事件 (由 OnMessage 觸發) ***
+HandleBackgroundClick(wParam, lParam, msg, hwnd) {
+    ; 這個函式由 OnMessage(0x201, ...) 註冊，專門監聽滑鼠左鍵在視窗上按下的訊息。
+    
+    ; 將 OSK 視窗設定為 "Last Found Window"，以便後續的 WinExist() 可以正確地針對它。
+    Gui, OSK: +LastFound
+    
+    ; 檢查觸發此訊息的視窗控制代碼 (hwnd) 是否就是我們的螢幕鍵盤視窗。
+    if (hwnd = WinExist()) {
+        ; 獲取滑鼠指標當前位置下的控制項資訊。
+        ; 第五個參數會接收控制項的 ClassNN (例如 Static1)。
+        MouseGetPos, , , , clicked_control
+        
+        ; 如果 clicked_control 是空的，就代表滑鼠點擊的位置沒有任何控制項，也就是點擊了 GUI 的背景空白處。
+        if (clicked_control = "") {
+            ; 既然是點擊空白處，我們就觸發系統內建的視窗拖曳功能。
+            ; PostMessage 0xA1, 2 是一個技巧，它模擬了在視窗標題列上按下滑鼠左鍵的行為。
+            PostMessage, 0xA1, 2
+        }
+        ; 如果 clicked_control 不是空的，代表使用者點擊的是一個按鈕。
+        ; 在這種情況下，我們什麼都不做，因為按鈕本身有 gHandleOSKClick 標籤，
+        ; 它的點擊事件會由 HandleOSKClick() 函式獨立處理。
+        ; 這個函式只專注於處理 "空白處" 的點擊。
+    }
+}
+
 ; 語境敏感熱鍵 (當 OSK 顯示時啟用)
 #If (keyboard.Enabled) 
 
 #If
 
-; 處理 GUI 點擊事件
+; 處理 GUI 按鈕點擊事件 (由 g-label 觸發)
 HandleOSKClick() {
-    if (A_GuiControl = "") {
-        return
-    }
-    
-    ; 將點擊傳遞給 OSK 類別的處理方法
+    ; 這個函式只會由鍵盤上的按鈕(具體來說是作為按鈕底層的 Text 控制項)觸發。
+    ; 因此 A_GuiControl 總會包含被點擊按鈕的名稱 (即它的掃描碼)。
+    ; 我們將這個名稱傳遞給 OSK 物件的 HandleOSKClick 方法，由它來處理後續的按鍵模擬。
     keyboard.HandleOSKClick(A_GuiControl)
     return
 }
@@ -62,8 +92,9 @@ Class OSK
         this.current_trans := 1 ; 當前透明度等級 (1 = 255/完全不透明)
         this.ScaleFactor := 1.5 ; 鍵盤縮放比例 (預設 1.5)
 
-        this.CurrentX := 0 ; 儲存當前 X 座標
-        this.CurrentY := 0 ; 儲存當前 Y 座標
+        ; *** 修改: 初始化為空字串，用於判斷是否為首次顯示 ***
+        this.CurrentX := "" ; 儲存當前 X 座標
+        this.CurrentY := "" ; 儲存當前 Y 座標
         
         ; 左側修飾鍵和特殊鎖定鍵
         this.Modifiers := ["sc02a", "sc01d", "sc05b", "sc038", "sc03a", "ScrollLock"]
@@ -98,8 +129,9 @@ Class OSK
         ; 標準鍵寬
         StdKey := 45 
 
-        ; Row 1: 功能鍵 (Esc, 移動, 佈局切換, 縮放, 重設, 透明度, 關閉, 隱藏)
-        this.Layout.Push([ ["sc001", StdKey], ["Move", 292], ["ToggleLayout", 60], ["ZoomOut", StdKey], ["ZoomIn", StdKey], ["Reset", StdKey], ["Transparent"], ["Close", StdKey], ["Hide", StdKey] ]) 
+        ; *** 修改：移除 "Move" 按鈕，改為 placeholder 以維持版面 ***
+        ; Row 1: 功能鍵 (Esc, 空白區, 佈局切換, 縮放, 重設, 透明度, 關閉, 隱藏)
+        this.Layout.Push([ ["sc001", StdKey], ["placeholder", 306], ["ToggleLayout", StdKey], ["ZoomOut", StdKey], ["ZoomIn", StdKey], ["Reset", StdKey], ["Transparent"], ["Close", StdKey], ["Hide", StdKey] ]) 
         
         ; Row 2: 數字列
         this.Layout.Push([ ["sc029", StdKey],["sc002", StdKey],["sc003", StdKey],["sc004", StdKey],["sc005", StdKey],["sc006", StdKey],["sc007", StdKey],["sc008", StdKey],["sc009", StdKey],["sc00a", StdKey],["sc00b", StdKey],["sc00c", StdKey],["sc00d", StdKey],["sc00e", 63] ])
@@ -118,19 +150,18 @@ Class OSK
         
         ; --- 共享按鍵顯示文字定義 (控制鍵) ---
         SharedNames := {} 
-        SharedNames["Move"]        := "移動"
-        SharedNames["Transparent"] := "透明"
-        SharedNames["Close"]       := "關閉"
-        SharedNames["Hide"]        := "隱藏"
-        SharedNames["ZoomOut"]     := "縮小"
-        SharedNames["ZoomIn"]      := "放大"
-        SharedNames["Reset"]       := "重設" 
+        SharedNames["Transparent"] := "◌"
+        SharedNames["Close"]       := "✕"
+        SharedNames["Hide"]        := "⇲"
+        SharedNames["ZoomOut"]     := "⊖"
+        SharedNames["ZoomIn"]      := "⊕"
+        SharedNames["Reset"]       := "↺" 
         SharedNames["placeholder"] := ""
         SharedNames["sc001"]       := "Esc"       
-        SharedNames["sc00e"]       := "BS"       ; Backspace
+        SharedNames["sc00e"]       := "←"       ; Backspace
         SharedNames["sc00f"]       := "Tab"       
-        SharedNames["sc03a"]       := "CapsLock"
-        SharedNames["sc01c"]       := "Enter"     
+        SharedNames["sc03a"]       := "⇭"
+        SharedNames["sc01c"]       := "↩"     
         SharedNames["sc02a"]       := "Shift"     ; LShift
         SharedNames["sc036"]       := "Shift"     ; RShift (雖然不在佈局中，但定義名稱)
         SharedNames["sc01d"]       := "Ctrl"      ; LCtrl
@@ -341,7 +372,8 @@ Class OSK
                                   or KeyText = "sc036" or KeyText = "sc01d" or KeyText = "sc05b" 
                                   or KeyText = "sc038" or KeyText = "sc039" or KeyText = "sc053" 
                                   or KeyText = "sc048" or KeyText = "sc050" or KeyText = "sc04b" 
-                                  or KeyText = "sc04d" or KeyText = "Move" or KeyText = "Transparent" 
+                                  or KeyText = "sc04d" 
+                                  or KeyText = "Transparent" 
                                   or KeyText = "Hide" or KeyText = "Close" 
                                   or KeyText = "ZoomOut" or KeyText = "ZoomIn" or KeyText = "Reset"
                                   or KeyText = "ToggleLayout")
@@ -459,7 +491,7 @@ Class OSK
 
     ; 銷毀並重新建立 GUI (用於縮放/重設/切換佈局)
     RebuildGUI() {
-        ; 1. 讀取 GUI 的當前實際位置
+        ; 1. 讀取 GUI 的當前實際位置 (如果已存在)
         DetectHiddenWindows On
         IfWinExist, 螢幕鍵盤
         {
@@ -478,14 +510,15 @@ Class OSK
         
         Sleep, 50 
         
-        ; 4. 使用上次儲存的位置顯示，並重新設定透明度
+        ; 4. 使用上次儲存的位置顯示
         GUI_X := this.CurrentX
         GUI_Y := this.CurrentY
         
+        ; *** 修改: 先顯示 GUI 再設定透明度，確保設定生效 ***
+        Gui, OSK:Show, % "x" GUI_X " y" GUI_Y " NA", 螢幕鍵盤
+
         trans_levels := [255, 220, 180, 100]
         WinSet, Transparent, % trans_levels[this.current_trans], 螢幕鍵盤
-
-        Gui, OSK:Show, % "x" GUI_X " y" GUI_Y " NA", 螢幕鍵盤
     }
     
     ; 顯示鍵盤
@@ -494,20 +527,26 @@ Class OSK
         CurrentMonitorIndex := this.GetCurrentMonitorIndex()
         DetectHiddenWindows On
         Gui, OSK: +LastFound
-        Gui, OSK:Show, Hide
+        Gui, OSK:Show, Hide ; 先隱藏顯示以取得視窗 handle 和尺寸
         GUI_Hwnd := WinExist()
         this.GetClientSize(GUI_Hwnd,GUI_Width,GUI_Height)
         DetectHiddenWindows Off
         
-        ; 計算初始置中位置 (螢幕工作區底部中央)
-        SysGet, MonWA, MonitorWorkArea, %CurrentMonitorIndex%
-        
-        GUI_X := ((MonWARight - MonWALeft - GUI_Width) / 2) + MonWALeft
-        GUI_Y := MonWABottom - GUI_Height
-        
-        ; 首次顯示時，儲存預設位置
-        this.CurrentX := GUI_X
-        this.CurrentY := GUI_Y
+        ; *** 修改: 如果已有位置，則使用上次的位置；否則計算初始位置 ***
+        if (this.CurrentX != "" and this.CurrentY != "") {
+            GUI_X := this.CurrentX
+            GUI_Y := this.CurrentY
+        } else {
+            ; 計算初始置中位置 (螢幕工作區底部中央)
+            SysGet, MonWA, MonitorWorkArea, %CurrentMonitorIndex%
+            
+            GUI_X := ((MonWARight - MonWALeft - GUI_Width) / 2) + MonWALeft
+            GUI_Y := MonWABottom - GUI_Height
+            
+            ; 首次顯示時，儲存預設位置
+            this.CurrentX := GUI_X
+            this.CurrentY := GUI_Y
+        }
         
         Gui, OSK:Show, % "x" GUI_X " y" GUI_Y " NA", 螢幕鍵盤
         ; 啟用按鍵狀態監控計時器
@@ -517,6 +556,16 @@ Class OSK
     
     ; 隱藏鍵盤
     Hide() {
+        ; *** 新增: 隱藏前先儲存當前視窗位置 ***
+        DetectHiddenWindows On
+        IfWinExist, 螢幕鍵盤
+        {
+            WinGetPos, currentX, currentY, , , 螢幕鍵盤
+            this.CurrentX := currentX
+            this.CurrentY := currentY
+        }
+        DetectHiddenWindows Off
+
         this.Enabled := False
         Gui, OSK: Hide
         ; 關閉按鍵狀態監控計時器
@@ -545,7 +594,7 @@ Class OSK
             this.PrettyName["ToggleLayout"] := "En" 
         } else {
             ; 當前是英文，按鈕顯示 '中' (切換到中文)
-            this.PrettyName["ToggleLayout"] := "中" 
+            this.PrettyName["ToggleLayout"] := "ㄅ" 
         }
     }
     
@@ -660,11 +709,9 @@ Class OSK
             Return ; 處理完成
         }
         
+        ; *** 修改：移除 "Move" 按鈕的處理邏輯 ***
         ; 處理內部控制功能鍵
-        if (Key = "Move") {
-            PostMessage, 0xA1, 2 ; 允許拖曳視窗
-            Return
-        } else if (Key = "ToggleLayout") {
+        if (Key = "ToggleLayout") {
 			KeyRow := this.Keys[Key][1]
 			KeyCol := this.Keys[Key][2]
 			
@@ -875,3 +922,4 @@ Class OSK
         Return
     }
 }
+
