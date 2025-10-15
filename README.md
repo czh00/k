@@ -1,4 +1,5 @@
 就是有注音標籤的OSK，執行後隱藏與顯示的熱鍵是Ctrl+Shift+O。
+
 AHK 繁體中文螢幕小鍵盤 (AHK Traditional Chinese On-Screen Keyboard)
 這是一個使用 AutoHotkey v1.1 編寫的功能齊全、可高度自訂的螢幕小鍵盤。它特別為需要繁體中文（注音）輸入法的使用者設計，同時也提供標準的 QWERTY 英文佈局。
 
@@ -39,7 +40,7 @@ AutoHotkey v1.1 或更新版本。 (注意：此腳本與 v2.0 不相容)
 
 下載腳本: 下載本專案中的 k_annotated.ahk 檔案。
 
-執行: 直接雙擊 k_annotated.ahk 檔案即可執行。您將會在系統右下角的系統匣中看到一個新的 AutoHotkey 圖示。
+執行: 直接雙擊 k.ahk 檔案即可執行。您將會在系統右下角的系統匣中看到一個新的 AutoHotkey 圖示。
 
 ⌨️ 快捷鍵 (Hotkeys)
 Ctrl + Shift + O : 顯示 / 隱藏螢幕鍵盤。
@@ -47,7 +48,7 @@ Ctrl + Shift + O : 顯示 / 隱藏螢幕鍵盤。
 Ctrl + Space : 切換鍵盤的「英文」與「注音」佈局 (此操作同時也會發送系統的中英文輸入法切換指令)。
 
 🎨 自訂 (Customization)
-您可以輕易地修改腳本來自訂鍵盤的外觀。打開 k_annotated.ahk 檔案，在 OSK 類別的 __New 方法中找到以下顏色變數並修改其 16 進位色碼：
+您可以輕易地修改腳本來自訂鍵盤的外觀。打開 k.ahk 檔案，在 OSK 類別的 __New 方法中找到以下顏色變數並修改其 16 進位色碼：
 
 ; --- 顏色主題設定 (Color Theme Settings) ---
 this.Background := "2A2A2A"          ; GUI 背景色
